@@ -42,6 +42,21 @@ class _MomentAndOpTypeValidatingDeviceType(cirq.Device):
 moment_and_op_type_validating_device = _MomentAndOpTypeValidatingDeviceType()
 
 
+def test_iadd_matches_add():
+    a = cirq.NamedQubit('alice')
+    b = cirq.NamedQubit('bob')
+    c = cirq.Circuit(
+        cirq.Moment(cirq.H(a), cirq.X(b)),
+        cirq.Moment(cirq.X(a)),
+    )
+    g = cirq.H(b)
+
+    cg = cirq.Circuit(c)
+    cg += g
+
+    assert cg == c + g
+
+
 def test_insert_moment_types():
     x = cirq.NamedQubit('x')
 
