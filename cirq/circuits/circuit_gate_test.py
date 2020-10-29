@@ -78,16 +78,17 @@ def test_default_validation_and_inverse():
     i = t**-1
     assert i**-1 == t
     assert t**-1 == i
-    assert (cirq.Circuit(cirq.decompose(i)) == 
-            cirq.Circuit(cirq.X(a), cirq.S(b)**-1, cirq.Z(a)))
-    cirq.testing.assert_allclose_up_to_global_phase(
-        cirq.unitary(i),
-        cirq.unitary(t).conj().T,
-        atol=1e-8)
+    print(cirq.Circuit(t).moments)
+    print(cirq.Circuit(i).moments)
+    assert cirq.Circuit(cirq.decompose(i)) == cirq.Circuit(
+        cirq.X(a),
+        cirq.S(b)**-1, cirq.Z(a))
+    cirq.testing.assert_allclose_up_to_global_phase(cirq.unitary(i),
+                                                    cirq.unitary(t).conj().T,
+                                                    atol=1e-8)
 
     cirq.testing.assert_implements_consistent_protocols(
-        i,
-        local_vals={'CircuitGate': cirq.CircuitGate})
+        i, local_vals={'CircuitGate': cirq.CircuitGate})
 
 
 def test_default_inverse():
@@ -98,6 +99,22 @@ def test_default_inverse():
     cirq.testing.assert_has_consistent_qid_shape(cirq.inverse(cg))
     cirq.testing.assert_has_consistent_qid_shape(
         cirq.inverse(cg.on(*cirq.LineQubit.range(3))))
+
+
+def test_repetition_and_inverse():
+    a, b = cirq.LineQubit.range(2)
+    cg = cirq.CircuitGate(cirq.Z(a), cirq.S(b), cirq.X(a))
+
+    t = (cg**3).on(a, b)
+    i = t**-1
+    assert cirq.Circuit(cirq.decompose(t)) == cirq.Circuit(
+        [cirq.Z(a), cirq.S(b), cirq.X(a)] * 3)
+    assert cirq.Circuit(cirq.decompose(i)) == cirq.Circuit(
+        [cirq.X(a), cirq.S(b)**-1, cirq.Z(a)] * 3)
+
+    five_t = t**5
+    assert cirq.Circuit(cirq.decompose(five_t)) == cirq.Circuit(
+        [cirq.Z(a), cirq.S(b), cirq.X(a)] * 3 * 5)
 
 
 def test_no_inverse_if_not_unitary():
@@ -121,8 +138,7 @@ def test_default_qudit_inverse():
 def test_circuit_gate_shape():
     shape_gate = cirq.CircuitGate(
         cirq.IdentityGate(qid_shape=(q.dimension,)).on(q)
-        for q in cirq.LineQid.for_qid_shape((1, 2, 3, 4))
-    )
+        for q in cirq.LineQid.for_qid_shape((1, 2, 3, 4)))
     assert cirq.qid_shape(shape_gate) == (1, 2, 3, 4)
     assert cirq.num_qubits(shape_gate) == 4
     assert shape_gate.num_qubits() == 4
@@ -138,4 +154,59 @@ def test_circuit_gate_json_dict():
     assert cg._json_dict_() == {
         'cirq_type': 'CircuitGate',
         'circuit': cg.circuit,
+        'repetitions': 1
     }
+
+    cg = cg**-3
+    assert cg._json_dict_() == {
+        'cirq_type': 'CircuitGate',
+        'circuit': cg.circuit,
+        'repetitions': -3
+    }
+
+
+def test_string_formats():
+    x, y, z = cirq.LineQubit.range(3)
+
+    cg = cirq.CircuitGate(cirq.X(x), cirq.H(y), cirq.CX(y, z),
+                          cirq.measure(x, y, z, key='m'))
+
+    assert str(cg) == """\
+CircuitGate:
+[ 0: ───X───────M('m')─── ]
+[               │         ]
+[ 1: ───H───@───M──────── ]
+[           │   │         ]
+[ 2: ───────X───M──────── ]"""
+
+    assert str(cg**5) == """\
+CircuitGate (repeat 5x):
+[ 0: ───X───────M('m')─── ]
+[               │         ]
+[ 1: ───H───@───M──────── ]
+[           │   │         ]
+[ 2: ───────X───M──────── ]"""
+
+    assert str(cg**-3) == """\
+CircuitGate (invert and repeat 3x):
+[ 0: ───X───────M('m')───         ]
+[               │                 ]
+[ 1: ───H───@───M────────         ]
+[           │   │                 ]
+[ 2: ───────X───M────────         ]"""
+
+    cs = cirq.Circuit(cirq.Z(z), (cg**-3).on(x, y, z))
+    assert str(cs) == """\
+          CircuitGate (invert and repeat 3x):
+          [ 0: ───X───────M('m')───         ]
+0: ───────[               │                 ]───
+          [ 1: ───H───@───M────────         ]
+          [           │   │                 ]
+          [ 2: ───────X───M────────         ]
+          │
+1: ───────#2────────────────────────────────────
+          │
+2: ───Z───#3────────────────────────────────────"""
+
+
+# TODO: test CircuitGates in Circuits
