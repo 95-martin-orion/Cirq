@@ -209,4 +209,147 @@ CircuitGate (invert and repeat 3x):
 2: ───Z───#3────────────────────────────────────"""
 
 
-# TODO: test CircuitGates in Circuits
+# Test CircuitGates in Circuits.
+
+
+def test_circuit_gate_and_gate():
+    # A circuit gate and gate in parallel.
+    q = cirq.LineQubit.range(3)
+    ops_circuit = cirq.Circuit(
+        cirq.CircuitGate(
+            cirq.X(q[0]),
+            cirq.H(q[2]),
+            cirq.CZ(q[0], q[2]),
+        ).on(q[0], q[2]),
+        cirq.X(q[1]),
+    )
+    flat_circuit = cirq.Circuit(
+        cirq.X(q[0]),
+        cirq.H(q[2]),
+        cirq.CZ(q[0], q[2]),
+        cirq.X(q[1]),
+    )
+
+    assert np.allclose(ops_circuit.unitary(), flat_circuit.unitary())
+
+
+def test_parallel_circuit_gates():
+    # Two circuit gates in parallel.
+    q = cirq.LineQubit.range(3)
+    ops_circuit = cirq.Circuit(
+        cirq.CircuitGate(
+            cirq.X(q[0]),
+            cirq.H(q[2]),
+            cirq.CZ(q[0], q[2]),
+        ).on(q[0], q[2]),
+        cirq.CircuitGate(
+            cirq.X(q[1]),
+            cirq.H(q[1]),
+        ).on(q[1]),
+    )
+    flat_circuit = cirq.Circuit(
+        cirq.X(q[0]),
+        cirq.H(q[2]),
+        cirq.CZ(q[0], q[2]),
+        cirq.X(q[1]),
+        cirq.H(q[1]),
+    )
+
+    assert np.allclose(ops_circuit.unitary(), flat_circuit.unitary())
+
+
+def test_nested_circuit_gates():
+    # A circuit gate inside another circuit gate.
+    q = cirq.LineQubit.range(3)
+    ops_circuit = cirq.Circuit(
+        cirq.CircuitGate(
+            cirq.CircuitGate(cirq.X(q[0]), cirq.H(q[0])).on(q[0]),
+            cirq.H(q[2]),
+            cirq.CZ(q[0], q[2]),
+        ).on(q[0], q[2]),
+        cirq.CircuitGate(cirq.X(q[1]), cirq.H(q[1])).on(q[1]),
+    )
+    flat_circuit = cirq.Circuit(
+        cirq.X(q[0]),
+        cirq.H(q[0]),
+        cirq.H(q[2]),
+        cirq.CZ(q[0], q[2]),
+        cirq.X(q[1]),
+        cirq.H(q[1]),
+    )
+
+    assert np.allclose(ops_circuit.unitary(), flat_circuit.unitary())
+
+
+def test_circuit_gate_with_qubits():
+    # Reassigning qubits of a circuit gate using on().
+    q = cirq.LineQubit.range(3)
+    ops_circuit = cirq.Circuit(
+        cirq.CircuitGate(
+            cirq.X(q[0]),
+            cirq.H(q[1]),
+            cirq.CZ(q[0], q[1]),
+        ).on(q[0], q[2]),
+        cirq.X(q[1]),
+    )
+    flat_circuit = cirq.Circuit(
+        cirq.X(q[0]),
+        cirq.H(q[2]),
+        cirq.CZ(q[0], q[2]),
+        cirq.X(q[1]),
+    )
+
+    assert np.allclose(ops_circuit.unitary(), flat_circuit.unitary())
+
+
+def test_circuit_gate_gate_collision():
+    # A circuit gate and a gate on the same qubit(s) at the same time
+    # should produce an error.
+    q = cirq.LineQubit.range(3)
+    with pytest.raises(ValueError):
+        cirq.Circuit(
+            cirq.Moment(
+                cirq.CircuitGate(
+                    cirq.X(q[0]),
+                    cirq.H(q[1]),
+                    cirq.CZ(q[0], q[1]),
+                ).on(q[0], q[1]),
+                cirq.X(q[1]),
+            ),)
+
+
+def test_multi_circuit_gate_collision():
+    # Two circuit gates on the same qubit(s) at the same time should
+    # produce an error.
+    q = cirq.LineQubit.range(3)
+    with pytest.raises(ValueError):
+        cirq.Circuit(
+            cirq.Moment(
+                cirq.CircuitGate(
+                    cirq.X(q[0]),
+                    cirq.H(q[1]),
+                    cirq.CZ(q[0], q[1]),
+                ).on(q[0], q[1]),
+                cirq.CircuitGate(
+                    cirq.X(q[2]),
+                    cirq.H(q[1]),
+                    cirq.CZ(q[2], q[1]),
+                ).on(q[1], q[2]),
+            ),)
+
+
+def test_tag_propagation():
+    q = cirq.LineQubit.range(3)
+    circuit_op = cirq.CircuitGate(
+        cirq.X(q[0]),
+        cirq.H(q[1]),
+        cirq.H(q[2]),
+        cirq.CZ(q[0], q[2]),
+    ).on(*q).with_tags(cirq.VirtualTag)
+
+    assert cirq.VirtualTag in circuit_op.tags
+
+    # Tags do not propagate during decomposition.
+    sub_ops = cirq.decompose(circuit_op)
+    for op in sub_ops:
+        assert cirq.VirtualTag not in op.tags
