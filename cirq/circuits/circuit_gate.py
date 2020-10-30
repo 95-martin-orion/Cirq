@@ -67,6 +67,8 @@ class CircuitGate(ops.Gate):
         return protocols.qid_shape(self.circuit)
 
     def __eq__(self, other):
+        if type(other) != type(self):
+            return False
         return (self.circuit == other.circuit and
                 self.repetitions == other.repetitions)
 

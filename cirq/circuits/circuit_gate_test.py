@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import AbstractSet
+from typing import AbstractSet, Optional
 
 import pytest
 import numpy as np
@@ -353,3 +353,88 @@ def test_tag_propagation():
     sub_ops = cirq.decompose(circuit_op)
     for op in sub_ops:
         assert cirq.VirtualTag not in op.tags
+
+
+# Demonstrate applications.
+
+
+def test_simulate_circuit_gate():
+    q = cirq.LineQubit.range(4)
+    ops_circuit = cirq.Circuit(
+        cirq.Moment(
+            cirq.X(q[3]),
+            cirq.CircuitGate(
+                cirq.X(q[0]),
+                cirq.X(q[2]),
+            ).on(q[0], q[2]),
+            cirq.X(q[1]),
+        ),)
+    flat_circuit = cirq.Circuit(
+        cirq.X(q[0]),
+        cirq.X(q[2]),
+        cirq.X(q[1]),
+        cirq.X(q[3]),
+    )
+
+    simulator = cirq.Simulator()
+    ops_result = simulator.simulate(ops_circuit)
+    flat_result = simulator.simulate(flat_circuit)
+    assert cirq.equal_up_to_global_phase(ops_result.state_vector(),
+                                         flat_result.state_vector())
+
+
+def test_point_optimizer():
+
+    class Opty(cirq.PointOptimizer):
+
+        def optimization_at(self, circuit: 'cirq.Circuit', index: int,
+                            op: 'cirq.Operation'
+                           ) -> Optional[cirq.PointOptimizationSummary]:
+            if isinstance(op.gate, cirq.CircuitGate):
+                base_circuit = op.gate.circuit.unfreeze()
+                Opty().optimize_circuit(base_circuit)
+                return cirq.PointOptimizationSummary(
+                    clear_span=1,
+                    clear_qubits=op.qubits,
+                    new_operations=cirq.CircuitGate(base_circuit).on(
+                        *op.qubits))
+            if isinstance(op.gate, cirq.CZPowGate):
+                return cirq.PointOptimizationSummary(
+                    clear_span=1,
+                    clear_qubits=op.qubits,
+                    new_operations=cirq.CircuitGate(
+                        cirq.CZ(*op.qubits), cirq.X.on_each(*op.qubits),
+                        cirq.X.on_each(*op.qubits),
+                        cirq.CZ(*op.qubits)).on(*op.qubits))
+
+    cg_qubits = [cirq.GridQubit(5, 2), cirq.GridQubit(5, 3)]
+    circuit = cirq.Circuit(
+        cirq.CZ(*cg_qubits),
+        cirq.X(cirq.GridQubit(6, 2)),
+    )
+
+    Opty().optimize_circuit(circuit)
+    assert circuit == cirq.Circuit(
+        cirq.CircuitGate(
+            cirq.CZ(*cg_qubits),
+            cirq.X.on_each(*cg_qubits),
+            cirq.X.on_each(*cg_qubits),
+            cirq.CZ(*cg_qubits),
+        ).on(*cg_qubits),
+        cirq.X(cirq.GridQubit(6, 2)),
+    )
+
+    Opty().optimize_circuit(circuit)
+    assert circuit == cirq.Circuit(
+        cirq.CircuitGate(
+            cirq.CircuitGate(cirq.CZ(*cg_qubits), cirq.X.on_each(*cg_qubits),
+                             cirq.X.on_each(*cg_qubits),
+                             cirq.CZ(*cg_qubits)).on(*cg_qubits),
+            cirq.X.on_each(*cg_qubits),
+            cirq.X.on_each(*cg_qubits),
+            cirq.CircuitGate(cirq.CZ(*cg_qubits), cirq.X.on_each(*cg_qubits),
+                             cirq.X.on_each(*cg_qubits),
+                             cirq.CZ(*cg_qubits)).on(*cg_qubits),
+        ).on(*cg_qubits),
+        cirq.X(cirq.GridQubit(6, 2)),
+    )
