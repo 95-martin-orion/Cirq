@@ -336,9 +336,9 @@ def test_simulate_circuit_gate():
         cirq.Moment(
             cirq.X(q[3]),
             cirq.CircuitGate(
-                cirq.X(q[0]),
-                cirq.X(q[2]),
-            ).on(q[0], q[2]),
+                cirq.H(q[0]),
+                cirq.CX(q[2]),
+            ).on(q[0], q[2]).repeat(2),
             cirq.X(q[1]),
         ),)
     flat_circuit = cirq.Circuit(
@@ -410,3 +410,20 @@ def test_point_optimizer():
         ).on(*cg_qubits),
         cirq.X(cirq.GridQubit(6, 2)),
     )
+
+
+def test_tag_propagation():
+    q = cirq.LineQubit.range(3)
+    circuit_op = cirq.CircuitGate(
+        cirq.X(q[0]),
+        cirq.H(q[1]),
+        cirq.H(q[2]),
+        cirq.CZ(q[0], q[2]),
+    ).on(*q).repeat(2).with_tags(cirq.VirtualTag)
+
+    assert cirq.VirtualTag in circuit_op.tags
+
+    # TODO: Tags must propagate during decomposition.
+    sub_ops = cirq.decompose(circuit_op)
+    for op in sub_ops:
+        assert cirq.VirtualTag in op.tags

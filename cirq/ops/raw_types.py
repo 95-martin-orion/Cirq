@@ -581,7 +581,12 @@ class TaggedOperation(Operation):
         return protocols.obj_to_dict_helper(self, ['sub_operation', 'tags'])
 
     def _decompose_(self) -> 'cirq.OP_TREE':
-        return protocols.decompose(self.sub_operation)
+        sub_ops = protocols.decompose(self.sub_operation)
+        from cirq.circuits import CircuitOperation
+        if not isinstance(self.sub_operation, CircuitOperation):
+            return sub_ops
+        # CircuitOperations propagate tags to their component operations.
+        return [op.with_tags(*self.tags) for op in sub_ops]
 
     def _pauli_expansion_(self) -> value.LinearDict[str]:
         return protocols.pauli_expansion(self.sub_operation)
